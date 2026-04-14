@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blocks - Hostel Management System</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="../css/navbar.css">
+    <link rel="stylesheet" href="../css/sidebar.css">
+    <link rel="stylesheet" href="../css/forms.css">
+    <link rel="stylesheet" href="../css/tables.css">
+    <link rel="stylesheet" href="../css/responsive.css">
+</head>
+<body>
+    <div class="app-container">
+        <nav class="navbar" id="navbar"></nav>
+
+        <div class="main-content">
+            <aside class="sidebar" id="sidebar"></aside>
+
+            <div class="content">
+                <div class="page-container">
+                    <div class="page-header">
+                        <h1>🏢 Blocks Management</h1>
+                        <button class="btn-primary" onclick="toggleBlockForm()">
+                            ➕ Add Block
+                        </button>
+                    </div>
+
+                    <!-- Add Block Form -->
+                    <div id="blockForm" class="form-container" style="display: none;">
+                        <form id="blockFormElement">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="blockName">Block Name</label>
+                                    <input type="text" id="blockName" name="block_name" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="blockLocation">Location</label>
+                                    <input type="text" id="blockLocation" name="location">
+                                </div>
+                            </div>
+
+                            <div class="form-actions">
+                                <button type="submit" class="btn-success">Create Block</button>
+                                <button type="button" class="btn-cancel" onclick="cancelBlockForm()">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Block Details -->
+                    <div id="blockDetails"></div>
+
+                    <!-- Blocks Table -->
+                    <div class="table-container">
+                        <table class="table" id="blocksTable">
+                            <thead>
+                                <tr>
+                                    <th>Block Name</th>
+                                    <th>Location</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="blocksTbody">
+                                <tr><td colspan="3" class="text-center">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/auth.js"></script>
+    <script src="../js/utils.js"></script>
+    <script src="../js/app.js"></script>
+    <script>
+        const Blocks = {
+            blocks: [],
+
+            async init() {
+                Auth.checkAuth();
+                await initializeApp();
+                await this.loadBlocks();
+                this.setupEventListeners();
+            },
+
+            async loadBlocks() {
+                try {
+                    const result = await apiCall('/blocks/');
+                    this.blocks = result.data || [];
+                    this.renderBlocks();
+                } catch (error) {
+                    Utils.showError('Failed to load blocks: ' + error.message);
+                    document.getElementById('blocksTbody').innerHTML = 
+                        '<tr><td colspan="3">Error loading data</td></tr>';
+                }
+            },
+
+            renderBlocks() {
+                const html = this.blocks.map(b => `
+                    <tr>
+                        <td>${b.block_name}</td>
+                        <td>${b.location || '-'}</td>
+                        <td>
+                            <button class="btn-edit" onclick="Blocks.viewBlock(${b.block_id})">👁️ View</button>
+                            <button class="btn-delete" onclick="Blocks.deleteBlock(${b.block_id})">🗑️ Delete</button>
+                        </td>
+                    </tr>
+                `).join('');
+
+                document.getElementById('blocksTbody').innerHTML = html || 
+                    '<tr><td colspan="3" class="text-center">No blocks found</td></tr>';
+            },
+
+            async saveBlock(e) {
+                e.preventDefault();
+                const block_name = document.getElementById('blockName').value;
+                const location = document.getElementById('blockLocation').value;
+
+                try {
+                    Utils.showLoading();
+                    const result = await apiCall('/blocks/', 'POST', { block_name, location });
+                    Utils.hideLoading();
+                    Utils.showSuccess('Block created successfully!');
+                    this.cancelForm();
+                    await this.loadBlocks();
+                } catch (error) {
+                    Utils.hideLoading();
+                    Utils.showError('Failed to create block: ' + error.message);
+                }
+            },
+
+            async viewBlock(blockId) {
+                try {
+                    const result = await apiCall(`/blocks/${blockId}`);
+                    const block = result.data;
+                    const facilities = block.facilities || [];
+                    
+                    const facilitiesHTML = facilities.map(f => 
+                        `<li>${f.facility_name}</li>`
+                    ).join('');
+                    
+                    document.getElementById('blockDetails').innerHTML = `
+                        <div class="section">
+                            <h3>${block.block_name}</h3>
+                            <p>Location: ${block.location || '-'}</p>
+                            <h4>Facilities:</h4>
+                            <ul>${facilitiesHTML || '<li>No facilities</li>'}</ul>
+                        </div>
+                    `;
+                } catch (error) {
+                    Utils.showError('Failed to load block details: ' + error.message);
+                }
+            },
+
+            async deleteBlock(blockId) {
+                if (!confirm('Are you sure you want to delete this block?')) return;
+                
+                try {
+                    Utils.showLoading();
+                    await apiCall(`/blocks/${blockId}`, 'DELETE');
+                    Utils.hideLoading();
+                    Utils.showSuccess('Block deleted successfully!');
+                    await this.loadBlocks();
+                } catch (error) {
+                    Utils.hideLoading();
+                    Utils.showError('Failed to delete block: ' + error.message);
+                }
+            },
+
+            toggleForm() {
+                const form = document.getElementById('blockForm');
+                form.style.display = form.style.display === 'none' ? 'block' : 'none';
+            },
+
+            cancelForm() {
+                document.getElementById('blockForm').style.display = 'none';
+                document.getElementById('blockFormElement').reset();
+            },
+
+            setupEventListeners() {
+                document.getElementById('blockFormElement').addEventListener('submit', (e) => this.saveBlock(e));
+            }
+        };
+
+        function toggleBlockForm() {
+            Blocks.toggleForm();
+        }
+
+        function cancelBlockForm() {
+            Blocks.cancelForm();
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            Blocks.init();
+        });
+    </script>
+</body>
+</html>
+            await saveBlock();
+        });
+    </script>
+</body>
+</html>

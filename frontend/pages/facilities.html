@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facilities - Hostel Management System</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="../css/navbar.css">
+    <link rel="stylesheet" href="../css/sidebar.css">
+    <link rel="stylesheet" href="../css/forms.css">
+    <link rel="stylesheet" href="../css/tables.css">
+    <link rel="stylesheet" href="../css/responsive.css">
+</head>
+<body>
+    <div class="app-container">
+        <nav class="navbar" id="navbar"></nav>
+
+        <div class="main-content">
+            <aside class="sidebar" id="sidebar"></aside>
+
+            <div class="content">
+                <div class="page-container">
+                    <div class="page-header">
+                        <h1>🧰 Facilities Management</h1>
+                        <div class="button-group">
+                            <button class="btn-primary" onclick="toggleFacilityForm()">
+                                ➕ Add Facility
+                            </button>
+                            <button class="btn-primary" onclick="toggleAssignForm()">
+                                🔗 Assign to Block
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Add Facility Form -->
+                    <div id="facilityForm" class="form-container" style="display: none;">
+                        <h3>Create New Facility</h3>
+                        <form id="facilityFormElement">
+                            <div class="form-group">
+                                <label for="facilityName">Facility Name</label>
+                                <input type="text" id="facilityName" name="facility_name" required>
+                            </div>
+
+                            <div class="form-actions">
+                                <button type="submit" class="btn-success">Create Facility</button>
+                                <button type="button" class="btn-cancel" onclick="cancelFacilityForm()">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Assign Facility Form -->
+                    <div id="assignForm" class="form-container" style="display: none;">
+                        <h3>Assign Facility to Block</h3>
+                        <form id="assignFormElement">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="facilityBlock">Block</label>
+                                    <select id="facilityBlock" name="block_id" required>
+                                        <option value="">Select Block</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="facilitySelect">Facility</label>
+                                    <select id="facilitySelect" name="facility_id" required>
+                                        <option value="">Select Facility</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-actions">
+                                <button type="submit" class="btn-success">Assign Facility</button>
+                                <button type="button" class="btn-cancel" onclick="cancelAssignForm()">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Tabs -->
+                    <div class="section">
+                        <h2>All Facilities</h2>
+                        <table class="table" id="facilitiesTable">
+                            <thead>
+                                <tr>
+                                    <th>Facility Name</th>
+                                    <th>Availability</th>
+                                </tr>
+                            </thead>
+                            <tbody id="facilitiesTbody">
+                                <tr><td colspan="2" class="text-center">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Block-wise Facilities -->
+                    <div class="section">
+                        <h2>Block-wise Facilities</h2>
+                        <table class="table" id="blockFacilitiesTable">
+                            <thead>
+                                <tr>
+                                    <th>Block Name</th>
+                                    <th>Facility Name</th>
+                                    <th>Availability</th>
+                                </tr>
+                            </thead>
+                            <tbody id="blockFacilitiesTbody">
+                                <tr><td colspan="3" class="text-center">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/auth.js"></script>
+    <script src="../js/utils.js"></script>
+    <script src="../js/app.js"></script>
+    <script>
+        const Facilities = {
+            facilities: [],
+            blocks: [],
+
+            async init() {
+                Auth.checkAuth();
+                await initializeApp();
+                await this.loadBlocks();
+                await this.loadFacilities();
+                await this.loadBlockFacilities();
+                this.setupEventListeners();
+            },
+
+            async loadBlocks() {
+                try {
+                    const result = await apiCall('/blocks/');
+                    this.blocks = result.data || [];
+                    const selector = document.getElementById('facilityBlock');
+                    this.blocks.forEach(block => {
+                        const option = document.createElement('option');
+                        option.value = block.block_id;
+                        option.textContent = block.block_name;
+                        selector.appendChild(option);
+                    });
+                } catch (error) {
+                    Utils.showError('Failed to load blocks: ' + error.message);
+                }
+            },
+
+            async loadFacilities() {
+                try {
+                    const result = await apiCall('/facilities/');
+                    this.facilities = result.data || [];
+                    this.renderFacilities();
+                    this.populateFacilitySelect();
+                } catch (error) {
+                    Utils.showError('Failed to load facilities: ' + error.message);
+                }
+            },
+
+            async loadBlockFacilities() {
+                try {
+                    const result = await apiCall('/facilities/block-wise');
+                    const blockFacilities = result.data || [];
+                    this.renderBlockFacilities(blockFacilities);
+                } catch (error) {
+                    Utils.showError('Failed to load block facilities: ' + error.message);
+                }
+            },
+
+            renderFacilities() {
+                const html = this.facilities.map(f => `
+                    <tr>
+                        <td>${f.facility_name}</td>
+                        <td>${f.availability || 'Available'}</td>
+                    </tr>
+                `).join('');
+
+                const tbody = document.getElementById('facilitiesTbody');
+                if (tbody) {
+                    tbody.innerHTML = html || '<tr><td colspan="2" class="text-center">No facilities found</td></tr>';
+                }
+            },
+
+            renderBlockFacilities(blockFacilities) {
+                const html = blockFacilities.map(bf => `
+                    <tr>
+                        <td>${bf.block_name}</td>
+                        <td>${bf.facility_name}</td>
+                        <td>${bf.availability || 'Available'}</td>
+                    </tr>
+                `).join('');
+
+                const tbody = document.getElementById('blockFacilitiesTbody');
+                if (tbody) {
+                    tbody.innerHTML = html || '<tr><td colspan="3" class="text-center">No facilities assigned</td></tr>';
+                }
+            },
+
+            populateFacilitySelect() {
+                const selector = document.getElementById('facilitySelect');
+                selector.innerHTML = '<option value="">Select Facility</option>';
+                this.facilities.forEach(facility => {
+                    const option = document.createElement('option');
+                    option.value = facility.facility_id;
+                    option.textContent = facility.facility_name;
+                    selector.appendChild(option);
+                });
+            },
+
+            async saveFacility(e) {
+                e.preventDefault();
+                const facility_name = document.getElementById('facilityName').value;
+
+                try {
+                    Utils.showLoading();
+                    await apiCall('/facilities/', 'POST', { facility_name });
+                    Utils.hideLoading();
+                    Utils.showSuccess('Facility created successfully!');
+                    this.cancelFacilityForm();
+                    await this.loadFacilities();
+                } catch (error) {
+                    Utils.hideLoading();
+                    Utils.showError('Failed to create facility: ' + error.message);
+                }
+            },
+
+            async assignFacility(e) {
+                e.preventDefault();
+                const block_id = document.getElementById('facilityBlock').value;
+                const facility_id = document.getElementById('facilitySelect').value;
+
+                try {
+                    Utils.showLoading();
+                    await apiCall('/facilities/assign', 'POST', { block_id, facility_id });
+                    Utils.hideLoading();
+                    Utils.showSuccess('Facility assigned to block successfully!');
+                    this.cancelAssignForm();
+                } catch (error) {
+                    Utils.hideLoading();
+                    Utils.showError('Failed to assign facility: ' + error.message);
+                }
+            },
+
+            async deleteFacility(facilityId) {
+                if (!confirm('Are you sure?')) return;
+                try {
+                    Utils.showLoading();
+                    await apiCall(`/facilities/${facilityId}`, 'DELETE');
+                    Utils.hideLoading();
+                    Utils.showSuccess('Facility deleted!');
+                    await this.loadFacilities();
+                } catch (error) {
+                    Utils.hideLoading();
+                    Utils.showError('Failed to delete facility: ' + error.message);
+                }
+            },
+
+            toggleFacilityForm() {
+                document.getElementById('facilityForm').style.display = 
+                    document.getElementById('facilityForm').style.display === 'none' ? 'block' : 'none';
+            },
+
+            toggleAssignForm() {
+                document.getElementById('assignForm').style.display = 
+                    document.getElementById('assignForm').style.display === 'none' ? 'block' : 'none';
+            },
+
+            cancelFacilityForm() {
+                document.getElementById('facilityForm').style.display = 'none';
+                document.getElementById('facilityFormElement').reset();
+            },
+
+            cancelAssignForm() {
+                document.getElementById('assignForm').style.display = 'none';
+                document.getElementById('assignFormElement').reset();
+            },
+
+            setupEventListeners() {
+                document.getElementById('facilityFormElement').addEventListener('submit', (e) => this.saveFacility(e));
+                document.getElementById('assignFormElement').addEventListener('submit', (e) => this.assignFacility(e));
+            }
+        };
+
+        function toggleFacilityForm() { Facilities.toggleFacilityForm(); }
+        function toggleAssignForm() { Facilities.toggleAssignForm(); }
+        function cancelFacilityForm() { Facilities.cancelFacilityForm(); }
+        function cancelAssignForm() { Facilities.cancelAssignForm(); }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            Facilities.init();
+        });
+    </script>
+</body>
+</html>
+
+        document.getElementById('facilityFormElement').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await saveFacility();
+        });
+
+        document.getElementById('assignFormElement').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await assignFacility();
+        });
+    </script>
+</body>
+</html>

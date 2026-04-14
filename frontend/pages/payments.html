@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payments - Hostel Management System</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="../css/navbar.css">
+    <link rel="stylesheet" href="../css/sidebar.css">
+    <link rel="stylesheet" href="../css/forms.css">
+    <link rel="stylesheet" href="../css/tables.css">
+    <link rel="stylesheet" href="../css/responsive.css">
+</head>
+<body>
+    <div class="app-container">
+        <nav class="navbar" id="navbar"></nav>
+
+        <div class="main-content">
+            <aside class="sidebar" id="sidebar"></aside>
+
+            <div class="content">
+                <div class="page-container">
+                    <div class="page-header">
+                        <h1>💳 Payments Management</h1>
+                        <button class="btn-primary" onclick="togglePaymentForm()">
+                            ➕ Add Payment
+                        </button>
+                    </div>
+
+                    <!-- Payment Form -->
+                    <div id="paymentForm" class="form-container" style="display: none;">
+                        <form id="paymentFormElement">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="paymentStudent">Student</label>
+                                    <select id="paymentStudent" name="student_id" required>
+                                        <option value="">Select Student</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="paymentAmount">Amount (₹)</label>
+                                    <input type="number" id="paymentAmount" name="amount" step="0.01" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="paymentMode">Payment Mode</label>
+                                    <select id="paymentMode" name="payment_mode" required>
+                                        <option value="">Select Mode</option>
+                                        <option value="Online">Online</option>
+                                        <option value="Cash">Cash</option>
+                                        <option value="Check">Check</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="paymentStatus">Status</label>
+                                    <select id="paymentStatus" name="status">
+                                        <option value="Paid">Paid</option>
+                                        <option value="Pending">Pending</option>
+                                        <option value="Failed">Failed</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-actions">
+                                <button type="submit" class="btn-success">Create Payment</button>
+                                <button type="button" class="btn-cancel" onclick="cancelPaymentForm()">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Filter -->
+                    <div class="filter-container">
+                        <select id="filterStudent" onchange="filterPaymentsByStudent()">
+                            <option value="">All Students</option>
+                        </select>
+                    </div>
+
+                    <!-- Payments Table -->
+                    <div class="table-container">
+                        <table class="table" id="paymentsTable">
+                            <thead>
+                                <tr>
+                                    <th>Student Name</th>
+                                    <th>Amount</th>
+                                    <th>Date</th>
+                                    <th>Mode</th>
+                                    <th>Status</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="paymentsTbody">
+                                <tr><td colspan="6" class="text-center">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/auth.js"></script>
+    <script src="../js/utils.js"></script>
+    <script src="../js/app.js"></script>
+    <script>
+        const Payments = {
+            payments: [],
+            students: [],
+
+            async init() {
+                Auth.checkAuth();
+                await initializeApp();
+                await this.loadStudents();
+                await this.loadPayments();
+                this.setupEventListeners();
+            },
+
+            async loadStudents() {
+                try {
+                    const result = await apiCall('/students/');
+                    this.students = result.data || [];
+                    const selectors = [document.getElementById('paymentStudent'), document.getElementById('filterStudent')];
+                    selectors.forEach(selector => {
+                        if (!selector) return;
+                        this.students.forEach(student => {
+                            const option = document.createElement('option');
+                            option.value = student.student_id;
+                            option.textContent = student.name;
+                            selector.appendChild(option);
+                        });
+                    });
+                } catch (error) {
+                    Utils.showError('Failed to load students: ' + error.message);
+                }
+            },
+
+            async loadPayments() {
+                try {
+                    const result = await apiCall('/payments/');
+                    this.payments = result.data || [];
+                    this.renderPayments();
+                } catch (error) {
+                    Utils.showError('Failed to load payments: ' + error.message);
+                }
+            },
+
+            renderPayments() {
+                const html = this.payments.map(p => `
+                    <tr>
+                        <td>${p.name}</td>
+                        <td>${Utils.formatCurrency(p.amount)}</td>
+                        <td>${Utils.formatDate(p.payment_date)}</td>
+                        <td>${p.payment_mode}</td>
+                        <td><span class="badge badge-${p.status.toLowerCase()}">${p.status}</span></td>
+                        <td>
+                            <button class="btn-edit" onclick="Payments.updateStatus(${p.payment_id})">✏️ Update</button>
+                        </td>
+                    </tr>
+                `).join('');
+
+                document.getElementById('paymentsTbody').innerHTML = html || 
+                    '<tr><td colspan="6" class="text-center">No payments found</td></tr>';
+            },
+
+            async savePayment(e) {
+                e.preventDefault();
+                const student_id = document.getElementById('paymentStudent').value;
+                const amount = document.getElementById('paymentAmount').value;
+                const payment_mode = document.getElementById('paymentMode').value;
+                const status = document.getElementById('paymentStatus').value;
+
+                try {
+                    Utils.showLoading();
+                    const result = await apiCall('/payments/', 'POST', {
+                        student_id, amount, payment_mode, status
+                    });
+                    Utils.hideLoading();
+                    Utils.showSuccess('Payment recorded successfully!');
+                    this.cancelForm();
+                    await this.loadPayments();
+                } catch (error) {
+                    Utils.hideLoading();
+                    Utils.showError('Failed to create payment: ' + error.message);
+                }
+            },
+
+            async updateStatus(paymentId) {
+                const payment = this.payments.find(p => p.payment_id === paymentId);
+                if (!payment) return;
+                
+                const newStatus = prompt('Enter new status (Pending/Completed/Failed):', payment.status);
+                if (!newStatus) return;
+
+                try {
+                    Utils.showLoading();
+                    await apiCall(`/payments/${paymentId}`, 'PUT', { status: newStatus });
+                    Utils.hideLoading();
+                    Utils.showSuccess('Payment status updated!');
+                    await this.loadPayments();
+                } catch (error) {
+                    Utils.hideLoading();
+                    Utils.showError('Failed to update payment: ' + error.message);
+                }
+            },
+
+            toggleForm() {
+                const form = document.getElementById('paymentForm');
+                form.style.display = form.style.display === 'none' ? 'block' : 'none';
+            },
+
+            cancelForm() {
+                document.getElementById('paymentForm').style.display = 'none';
+                document.getElementById('paymentFormElement').reset();
+            },
+
+            setupEventListeners() {
+                document.getElementById('paymentFormElement').addEventListener('submit', (e) => this.savePayment(e));
+            }
+        };
+
+        function togglePaymentForm() {
+            Payments.toggleForm();
+        }
+
+        function cancelPaymentForm() {
+            Payments.cancelForm();
+        }
+
+        function filterPaymentsByStudent() {
+            // Handle filter logic if needed
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            Payments.init();
+        });
+    </script>
+</body>
+</html>

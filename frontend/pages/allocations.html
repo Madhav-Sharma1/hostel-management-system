@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Allocations - Hostel Management System</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="../css/navbar.css">
+    <link rel="stylesheet" href="../css/sidebar.css">
+    <link rel="stylesheet" href="../css/forms.css">
+    <link rel="stylesheet" href="../css/tables.css">
+    <link rel="stylesheet" href="../css/responsive.css">
+</head>
+<body>
+    <div class="app-container">
+        <nav class="navbar" id="navbar"></nav>
+
+        <div class="main-content">
+            <aside class="sidebar" id="sidebar"></aside>
+
+            <div class="content">
+                <div class="page-container">
+                    <div class="page-header">
+                        <h1> Room Allocations</h1>
+                        <button class="btn-primary" onclick="toggleAllocationForm()">
+                            Allocate Room
+                        </button>
+                    </div>
+
+                    <div id="allocationForm" class="form-container" style="display: none;">
+                        <form id="allocationFormElement">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="allocationStudent">Student</label>
+                                    <select id="allocationStudent" name="student_id" required>
+                                        <option value="">Select Student</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="allocationRoom">Room</label>
+                                    <select id="allocationRoom" name="room_id" required>
+                                        <option value="">Select Room</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="allocationDate">Allocation Date</label>
+                                    <input type="date" id="allocationDate" name="allocation_date">
+                                </div>
+                            </div>
+
+                            <div class="form-actions">
+                                <button type="submit" class="btn-success">Allocate Room</button>
+                                <button type="button" class="btn-cancel" onclick="cancelAllocationForm()">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div class="table-container">
+                        <table class="table" id="allocationsTable">
+                            <thead>
+                                <tr>
+                                    <th>Student Name</th>
+                                    <th>Phone</th>
+                                    <th>Room #</th>
+                                    <th>Block</th>
+                                    <th>Allocation Date</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="allocationsTbody">
+                                <tr><td colspan="7" class="text-center">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/auth.js"></script>
+    <script src="../js/utils.js"></script>
+    <script src="../js/app.js"></script>
+    <script>
+        const Allocations = {
+            allocations: [],
+            students: [],
+            rooms: [],
+
+            async init() {
+                Auth.checkAuth();
+                await initializeApp();
+                await this.loadStudents();
+                await this.loadEmptyRooms();
+                await this.loadAllocations();
+                this.setupEventListeners();
+            },
+
+            async loadStudents() {
+                try {
+                    const result = await apiCall('/students/');
+                    this.students = result.data || [];
+                    const selector = document.getElementById('allocationStudent');
+                    this.students.forEach(student => {
+                        const option = document.createElement('option');
+                        option.value = student.student_id;
+                        option.textContent = student.name;
+                        selector.appendChild(option);
+                    });
+                } catch (error) {
+                    Utils.showError('Failed to load students: ' + error.message);
+                }
+            },
+
+            async loadEmptyRooms() {
+                try {
+                    const result = await apiCall('/rooms/empty');
+                    this.rooms = result.data || [];
+                    const selector = document.getElementById('allocationRoom');
+                    this.rooms.forEach(room => {
+                        const option = document.createElement('option');
+                        option.value = room.room_id;
+                        option.textContent = `${room.room_number} (${room.block_name})`;
+                        selector.appendChild(option);
+                    });
+                } catch (error) {
+                    Utils.showError('Failed to load rooms: ' + error.message);
+                }
+            },
+
+            async loadAllocations() {
+                try {
+                    const result = await apiCall('/allocations/');
+                    this.allocations = result.data || [];
+                    this.renderAllocations();
+                } catch (error) {
+                    Utils.showError('Failed to load allocations: ' + error.message);
+                    document.getElementById('allocationsTbody').innerHTML = 
+                        '<tr><td colspan="7">Error loading data</td></tr>';
+                }
+            },
+
+            renderAllocations() {
+                const html = this.allocations.map(a => `
+                    <tr>
+                        <td>${a.name}</td>
+                        <td>${a.phone}</td>
+                        <td>${a.room_number}</td>
+                        <td>${a.block_name}</td>
+                        <td>${Utils.formatDate(a.allocation_date)}</td>
+                        <td><span class="badge badge-${a.status.toLowerCase()}">${a.status}</span></td>
+                        <td>
+                            <button class="btn-delete" onclick="Allocations.deallocate(${a.allocation_id})">🗑️ Deallocate</button>
+                        </td>
+                    </tr>
+                `).join('');
+
+                document.getElementById('allocationsTbody').innerHTML = html || 
+                    '<tr><td colspan="7" class="text-center">No allocations found</td></tr>';
+            },
+
+            async saveAllocation(e) {
+                e.preventDefault();
+                const student_id = document.getElementById('allocationStudent').value;
+                const room_id = document.getElementById('allocationRoom').value;
+                const allocation_date = document.getElementById('allocationDate').value;
+
+                try {
+                    Utils.showLoading();
+                    const result = await apiCall('/allocations/', 'POST', {
+                        student_id, room_id, allocation_date
+                    });
+                    Utils.hideLoading();
+                    Utils.showSuccess('Room allocated successfully!');
+                    this.cancelForm();
+                    await this.loadAllocations();
+                } catch (error) {
+                    Utils.hideLoading();
+                    Utils.showError('Failed to allocate room: ' + error.message);
+                }
+            },
+
+            async deallocate(allocationId) {
+                if (!confirm('Are you sure you want to deallocate this room?')) return;
+                
+                try {
+                    Utils.showLoading();
+                    const result = await apiCall(`/allocations/deallocate/${allocationId}`, 'PUT');
+                    Utils.hideLoading();
+                    Utils.showSuccess('Room deallocated successfully!');
+                    await this.loadAllocations();
+                    await this.loadEmptyRooms();
+                } catch (error) {
+                    Utils.hideLoading();
+                    Utils.showError('Failed to deallocate room: ' + error.message);
+                }
+            },
+
+            toggleForm() {
+                const form = document.getElementById('allocationForm');
+                form.style.display = form.style.display === 'none' ? 'block' : 'none';
+                if (form.style.display === 'none') {
+                    document.getElementById('allocationFormElement').reset();
+                }
+            },
+
+            cancelForm() {
+                document.getElementById('allocationForm').style.display = 'none';
+                document.getElementById('allocationFormElement').reset();
+            },
+
+            setupEventListeners() {
+                document.getElementById('allocationFormElement').addEventListener('submit', (e) => this.saveAllocation(e));
+            }
+        };
+
+        // Window functions for onclick handlers
+        function toggleAllocationForm() {
+            Allocations.toggleForm();
+        }
+
+        function cancelAllocationForm() {
+            Allocations.cancelForm();
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => Allocations.init());
+    </script>
+</body>
+</html>

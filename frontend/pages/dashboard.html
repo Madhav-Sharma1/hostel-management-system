@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Hostel Management System</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="../css/navbar.css">
+    <link rel="stylesheet" href="../css/sidebar.css">
+    <link rel="stylesheet" href="../css/dashboard.css">
+    <link rel="stylesheet" href="../css/tables.css">
+    <link rel="stylesheet" href="../css/responsive.css">
+</head>
+<body>
+    <div class="app-container">
+        <nav class="navbar" id="navbar"></nav>
+
+        <div class="main-content">
+            <aside class="sidebar" id="sidebar"></aside>
+
+            <div class="content">
+                <div class="dashboard-container">
+                    <h1>📊 Dashboard</h1>
+
+                    <!-- Summary Cards -->
+                    <div class="summary-cards" id="summaryCards">
+                        <div class="loading">Loading dashboard...</div>
+                    </div>
+
+                    <!-- Recent Allocations -->
+                    <div class="section">
+                        <h2>📍 Recent Allocations</h2>
+                        <div id="recentAllocations" class="table-container">
+                            <div class="loading">Loading allocations...</div>
+                        </div>
+                    </div>
+
+                    <!-- Recent Payments -->
+                    <div class="section">
+                        <h2>💰 Recent Payments</h2>
+                        <div id="recentPayments" class="table-container">
+                            <div class="loading">Loading payments...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/auth.js"></script>
+    <script src="../js/utils.js"></script>
+    <script src="../js/api.js"></script>
+    <script>
+        // Dashboard data structure for API calls
+        const Dashboard = {
+            async init() {
+                Auth.checkAuth();
+                await initializeApp();
+                await this.loadSummary();
+            },
+
+            async loadSummary() {
+                try {
+                    const result = await apiCall('/dashboard/');
+                    
+                    // Build summary cards
+                    const summaryHTML = `
+                        <div class="card">
+                            <h3>👨‍🎓 Total Students</h3>
+                            <p class="number">${result.data.summary.totalStudents || 'N/A'}</p>
+                        </div>
+                        <div class="card">
+                            <h3>🛏️ Total Rooms</h3>
+                            <p class="number">${result.data.summary.totalRooms || 'N/A'}</p>
+                        </div>
+                        <div class="card">
+                            <h3>✅ Available Rooms</h3>
+                            <p class="number">${result.data.summary.availableRooms || 'N/A'}</p>
+                        </div>
+                        <div class="card">
+                            <h3>🏢 Total Blocks</h3>
+                            <p class="number">${result.data.summary.totalBlocks || 'N/A'}</p>
+                        </div>
+                        <div class="card">
+                            <h3>💳 Pending Payments</h3>
+                            <p class="number">${result.data.summary.pendingPayments || 'N/A'}</p>
+                        </div>
+                        <div class="card">
+                            <h3>🍽️ Total Mess</h3>
+                            <p class="number">${result.data.summary.totalMess || 'N/A'}</p>
+                        </div>
+                    `;
+                    document.getElementById('summaryCards').innerHTML = summaryHTML;
+
+                    // Load recent allocations
+                    const allocationsHTML = result.data.recentAllocations.map(a => `
+                        <tr>
+                            <td>${a.name}</td>
+                            <td>${a.room_number}</td>
+                            <td>${a.block_name}</td>
+                            <td>${Utils.formatDate(a.allocation_date)}</td>
+                        </tr>
+                    `).join('');
+                    
+                    document.getElementById('recentAllocations').innerHTML = `
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Student</th>
+                                    <th>Room</th>
+                                    <th>Block</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>${allocationsHTML || '<tr><td colspan="4">No data</td></tr>'}</tbody>
+                        </table>
+                    `;
+
+                    // Load recent payments
+                    const paymentsHTML = result.data.recentPayments.map(p => `
+                        <tr>
+                            <td>${p.name}</td>
+                            <td>${Utils.formatCurrency(p.amount)}</td>
+                            <td>${Utils.formatDate(p.payment_date)}</td>
+                            <td><span class="badge badge-${p.status.toLowerCase()}">${p.status}</span></td>
+                        </tr>
+                    `).join('');
+
+                    document.getElementById('recentPayments').innerHTML = `
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Student</th>
+                                    <th>Amount</th>
+                                    <th>Date</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>${paymentsHTML || '<tr><td colspan="4">No data</td></tr>'}</tbody>
+                        </table>
+                    `;
+                } catch (error) {
+                    console.error('Dashboard error:', error);
+                    Utils.showError('Failed to load dashboard: ' + error.message);
+                }
+            }
+        };
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', () => Dashboard.init());
+    </script>
+    <script src="../js/auth.js"></script>
+    <script src="../js/dashboard.js"></script>
+    <script src="../js/app.js"></script>
+    <script>
+        // Initialize dashboard on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadDashboard();
+        });
+    </script>
+</body>
+</html>

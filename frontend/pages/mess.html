@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mess - Hostel Management System</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="../css/navbar.css">
+    <link rel="stylesheet" href="../css/sidebar.css">
+    <link rel="stylesheet" href="../css/forms.css">
+    <link rel="stylesheet" href="../css/tables.css">
+    <link rel="stylesheet" href="../css/responsive.css">
+</head>
+<body>
+    <div class="app-container">
+        <nav class="navbar" id="navbar"></nav>
+
+        <div class="main-content">
+            <aside class="sidebar" id="sidebar"></aside>
+
+            <div class="content">
+                <div class="page-container">
+                    <div class="page-header">
+                        <h1>🍽️ Mess Management</h1>
+                        <div class="button-group">
+                            <button class="btn-primary" onclick="toggleMessForm()">
+                                ➕ Add Mess
+                            </button>
+                            <button class="btn-primary" onclick="toggleMessSubscribeForm()">
+                                ✅ Subscribe Student
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Add Mess Form -->
+                    <div id="messForm" class="form-container" style="display: none;">
+                        <h3>Create New Mess</h3>
+                        <form id="messFormElement">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="messName">Mess Name</label>
+                                    <input type="text" id="messName" name="mess_name" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="messCoupon">Coupon Code</label>
+                                    <input type="text" id="messCoupon" name="coupon">
+                                </div>
+                                <div class="form-group">
+                                    <label for="messFee">Monthly Fee (₹)</label>
+                                    <input type="number" id="messFee" name="fee" step="0.01" required>
+                                </div>
+                            </div>
+
+                            <div class="form-actions">
+                                <button type="submit" class="btn-success">Create Mess</button>
+                                <button type="button" class="btn-cancel" onclick="cancelMessForm()">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Subscribe Form -->
+                    <div id="messSubscribeForm" class="form-container" style="display: none;">
+                        <h3>Subscribe Student to Mess</h3>
+                        <form id="messSubscribeFormElement">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="messStudent">Student</label>
+                                    <select id="messStudent" name="student_id" required>
+                                        <option value="">Select Student</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="messMess">Mess</label>
+                                    <select id="messMess" name="mess_id" required>
+                                        <option value="">Select Mess</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-actions">
+                                <button type="submit" class="btn-success">Subscribe</button>
+                                <button type="button" class="btn-cancel" onclick="cancelMessSubscribeForm()">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Mess Table -->
+                    <div class="table-container">
+                        <table class="table" id="messTable">
+                            <thead>
+                                <tr>
+                                    <th>Mess Name</th>
+                                    <th>Monthly Fee</th>
+                                    <th>Coupon Code</th>
+                                </tr>
+                            </thead>
+                            <tbody id="messTbody">
+                                <tr><td colspan="3" class="text-center">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/auth.js"></script>
+    <script src="../js/utils.js"></script>
+    <script src="../js/app.js"></script>
+    <script>
+        const Mess = {
+            messlist: [],
+            students: [],
+
+            async init() {
+                Auth.checkAuth();
+                await initializeApp();
+                await this.loadStudents();
+                await this.loadMess();
+                this.setupEventListeners();
+            },
+
+            async loadStudents() {
+                try {
+                    const result = await apiCall('/students/');
+                    this.students = result.data || [];
+                    const selector = document.getElementById('messStudent');
+                    this.students.forEach(student => {
+                        const option = document.createElement('option');
+                        option.value = student.student_id;
+                        option.textContent = student.name;
+                        selector.appendChild(option);
+                    });
+                } catch (error) {
+                    Utils.showError('Failed to load students: ' + error.message);
+                }
+            },
+
+            async loadMess() {
+                try {
+                    const result = await apiCall('/mess/');
+                    this.messlist = result.data || [];
+                    this.renderMess();
+                    this.populateMessSelect();
+                } catch (error) {
+                    Utils.showError('Failed to load mess: ' + error.message);
+                }
+            },
+
+            renderMess() {
+                const html = this.messlist.map(m => `
+                    <tr>
+                        <td>${m.mess_name || 'Mess'}</td>
+                        <td>${Utils.formatCurrency(m.fee) || '-'}</td>
+                        <td>${m.coupon || '-'}</td>
+                    </tr>
+                `).join('');
+
+                const tbody = document.getElementById('messTbody');
+                if (tbody) {
+                    tbody.innerHTML = html || '<tr><td colspan="3" class="text-center">No mess found</td></tr>';
+                }
+            },
+
+            populateMessSelect() {
+                const selector = document.getElementById('messMess');
+                selector.innerHTML = '<option value="">Select Mess</option>';
+                this.messlist.forEach(mess => {
+                    const option = document.createElement('option');
+                    option.value = mess.mess_id;
+                    option.textContent = mess.mess_name || 'Mess ' + mess.mess_id;
+                    selector.appendChild(option);
+                });
+            },
+
+            async subscribeMess(e) {
+                e.preventDefault();
+                const student_id = document.getElementById('messStudent').value;
+                const mess_id = document.getElementById('messMess').value;
+
+                try {
+                    Utils.showLoading();
+                    await apiCall('/mess/subscribe', 'POST', { student_id, mess_id });
+                    Utils.hideLoading();
+                    Utils.showSuccess('Student subscribed to mess successfully!');
+                    this.cancelSubscribeForm();
+                } catch (error) {
+                    Utils.hideLoading();
+                    Utils.showError('Failed to subscribe: ' + error.message);
+                }
+            },
+
+            toggleMessForm() {
+                document.getElementById('messForm').style.display = 
+                    document.getElementById('messForm').style.display === 'none' ? 'block' : 'none';
+            },
+
+            toggleMessSubscribeForm() {
+                document.getElementById('messSubscribeForm').style.display = 
+                    document.getElementById('messSubscribeForm').style.display === 'none' ? 'block' : 'none';
+            },
+
+            cancelMessForm() {
+                document.getElementById('messForm').style.display = 'none';
+                document.getElementById('messFormElement').reset();
+            },
+
+            cancelSubscribeForm() {
+                document.getElementById('messSubscribeForm').style.display = 'none';
+                document.getElementById('messSubscribeFormElement').reset();
+            },
+
+            setupEventListeners() {
+                const form = document.getElementById('messSubscribeFormElement');
+                if (form) {
+                    form.addEventListener('submit', (e) => this.subscribeMess(e));
+                }
+            }
+        };
+
+        function toggleMessForm() { Mess.toggleMessForm(); }
+        function toggleMessSubscribeForm() { Mess.toggleMessSubscribeForm(); }
+        function cancelMessForm() { Mess.cancelMessForm(); }
+        function cancelMessSubscribeForm() { Mess.cancelSubscribeForm(); }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            Mess.init();
+        });
+    </script>
+</body>
+</html>
